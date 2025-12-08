@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fall Detection System</title>
+
+    <style>
+        body {
+            margin: 0;
+            background-color: #e8f5e9; /* 연한 초록 배경 */
+            font-family: Arial, sans-serif;
+        }
+
+        /* 상단 제목 */
+        header {
+            background: #2e7d32; /* 짙은 초록 */
+            padding: 15px;
+            text-align: center;
+            color: #fff;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        /* 카메라 박스 중앙 배치 */
+        .camera-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .camera-box {
+            width: 70%;
+            max-width: 900px;
+            background: #000;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+        }
+
+        .camera-box img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* 상태 바 */
+        .status-bar {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 18px;
+            color: #1b5e20;
+            font-weight: 600;
+        }
+
+        /* 경고 팝업 */
+        #alertModal {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 0; top: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(76, 175, 80, 0.35); /* 초록색 투명 오버레이 */
+            backdrop-filter: blur(4px);
+        }
+
+        #alertBox {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 28px 35px;
+            border-radius: 12px;
+            text-align: center;
+            width: 270px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+            animation: popup 0.25s ease-out;
+        }
+
+        @keyframes popup {
+            from { transform: translate(-50%, -50%) scale(0.8); }
+            to   { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        #alertBox h2 {
+            margin: 0;
+            color: #2e7d32;
+            font-size: 22px;
+        }
+
+        #alertButton {
+            margin-top: 18px;
+            padding: 10px 20px;
+            background: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #alertButton:hover {
+            background: #1b5e20;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>🐸 실시간 낙상 감지 모니터링</header>
+
+    <div class="camera-wrapper">
+        <div class="camera-box">
+            <img src="/camera">
+        </div>
+    </div>
+
+    <div class="status-bar">
+        📡 상태: <span id="statusText">정상</span>
+    </div>
+
+    <!-- 경고 팝업 -->
+    <div id="alertModal">
+        <div id="alertBox">
+            <h2>⚠ 낙상 감지</h2>
+            <p id="alertTime"></p>
+            <button id="alertButton" onclick="closeAlert()">확인</button>
+        </div>
+    </div>
+
+    <script>
+        setInterval(() => {
+            fetch("/fall-status")
+                .then(res => res.json())
+                .then(data => {
+                    if (data.fall === true) {
+                        showAlert();
+                    }
+                });
+        }, 1000);
+
+        function showAlert() {
+            const now = new Date().toLocaleTimeString();
+            document.getElementById("alertTime").innerText = "감지 시각: " + now;
+            document.getElementById("alertModal").style.display = "block";
+            document.getElementById("statusText").innerText = "⚠ 위험 감지";
+            document.getElementById("statusText").style.color = "#c62828";  // 위험 시 빨간색 텍스트
+        }
+
+        function closeAlert() {
+            document.getElementById("alertModal").style.display = "none";
+            document.getElementById("statusText").innerText = "정상";
+            document.getElementById("statusText").style.color = "#1b5e20"; // 다시 초록색
+        }
+    </script>
+
+</body>
+</html>
