@@ -13,7 +13,7 @@ app = Flask(__name__)
 # ---------------------------
 # Raspberry Pi 서버 설정
 # ---------------------------
-RASPBERRY_IP = "172.20.8.191"
+RASPBERRY_IP = "172.20.9.83"
 PORT = 8486
 
 # ---------------------------
@@ -21,6 +21,11 @@ PORT = 8486
 # ---------------------------
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
+
+# ---------------------------
+# 낙상 상태 플래그 (웹에서 읽을 값)
+# ---------------------------
+fall_flag = False   # ★ 추가됨
 
 # ---------------------------
 # 각도 계산 함수
@@ -44,6 +49,7 @@ def is_fall_condition_met(keypoints):
         lk = keypoints[mp_pose.PoseLandmark.LEFT_KNEE.value]
         rk = keypoints[mp_pose.PoseLandmark.RIGHT_KNEE.value]
 
+        # 관절 가시성 체크
         if min(ls.visibility, rs.visibility, lh.visibility, rh.visibility, lk.visibility, rk.visibility) < 0.5:
             return False
 
@@ -52,8 +58,8 @@ def is_fall_condition_met(keypoints):
         knee = [(lk.x + rk.x) / 2, (lk.y + rk.y) / 2]
 
         angle = calculate_angle(shoulder, hip, knee)
-
         return 30 <= angle <= 150
+
     except:
         return False
 
@@ -63,8 +69,8 @@ def is_fall_condition_met(keypoints):
 latest_frame = None  # Flask가 스트리밍할 최신 프레임
 
 def socket_receiver():
-    """라즈베리파이로부터 프레임을 계속 받아서 처리 후 latest_frame에 저장"""
-    global latest_frame
+    """라즈베리파이로부터 프레임을 받아 처리 후 latest_frame과 fall_flag 업데이트"""
+    global latest_frame, fall_flag  # ★ fall_flag 업데이트 위해 추가
 
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((RASPBERRY_IP, PORT))
@@ -75,10 +81,6 @@ def socket_receiver():
     fall_detected = False
     fall_start = None
     required_duration = 0.2
-    flashing = False
-    last_flash_time = 0
-    flash_interval = 0.5
-    mask_visible = False
 
     with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
 
@@ -125,31 +127,19 @@ def socket_receiver():
                     else:
                         elapsed = now - fall_start
                         if elapsed >= required_duration:
-                            flashing = True
+                            fall_flag = True    # ★ 웹에 "낙상 발생" 신호 보냄
                             cv2.putText(frame, 'Fall Detected', (50, 50),
                                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 else:
                     fall_detected = False
                     fall_start = None
-                    flashing = False
-                    mask_visible = False
-
-                # 플래쉬 효과
-                if flashing:
-                    if now - last_flash_time >= flash_interval:
-                        mask_visible = not mask_visible
-                        last_flash_time = now
-
-                    if mask_visible:
-                        overlay = frame.copy()
-                        cv2.rectangle(overlay, (0, 0), (frame.shape[1], frame.shape[0]),
-                                      (0, 0, 255), -1)
-                        frame = cv2.addWeighted(overlay, 0.4, frame, 0.6, 0)
+                    fall_flag = False  # ★ 정상 상태로 복귀
 
                 mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
-            # 최신 프레임을 웹 스트리밍 용으로 저장
+            # 웹 스트리밍용 최신 프레임 업데이트
             latest_frame = frame
+
 
 # ---------------------------
 # Flask MJPEG 스트리밍
@@ -166,6 +156,19 @@ def generate_frames():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
+
+# ---------------------------
+# ★ 낙상 상태 확인 API (HTML에서 fetch로 호출)
+# ---------------------------
+@app.route("/fall-status")
+def fall_status():
+    global fall_flag
+    return {"fall": fall_flag}
+
+
+# ---------------------------
+# 라우트
+# ---------------------------
 @app.route('/')
 def home():
     return render_template('cameraPage.html')
@@ -174,6 +177,7 @@ def home():
 def camera():
     return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
 # ---------------------------
 # 메인
